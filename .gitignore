@@ -1,0 +1,10 @@
+# Built application files
+*.apk
+
+# Generated files
+bin/
+gen/
+out/
+obj/
+build/
+
