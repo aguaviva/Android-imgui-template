@@ -6,5 +6,6 @@ bin/
 gen/
 out/
 obj/
+libs/
 build/
 
