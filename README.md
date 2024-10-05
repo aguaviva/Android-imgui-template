@@ -10,3 +10,5 @@ git clone git@github.com:aguaviva/Android-imgui-template.git --recurse-submodule
 ./cross-compile-kissfft.sh
 ./build.sh
 ```
+Notes:
+- remember to grant microphone permissions or app will crash
