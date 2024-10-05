@@ -7,8 +7,7 @@
 #include <EGL/egl.h>
 #include <GLES3/gl3.h>
 #include <string>
-#include "waterfall.h"
-#include "audio/audio_main.h"
+#include "Spectrogrammer.h"
 
 // Data
 static EGLDisplay           g_EglDisplay = EGL_NO_DISPLAY;
@@ -182,10 +181,7 @@ void Init(struct android_app* app)
     // FIXME: Put some effort into DPI awareness
     ImGui::GetStyle().ScaleAllSizes(3.0f * 2);
 
-    Init_waterfall();
-    Audio_createSLEngine(44100, 1024);
-    Audio_createAudioRecorder();
-    Audio_startPlay();
+    Spectrogrammer_Init();
 
     g_Initialized = true;
 }
@@ -196,10 +192,6 @@ void MainLoopStep()
     if (g_EglDisplay == EGL_NO_DISPLAY)
         return;
 
-    // Our state
-    // (we use static, which essentially makes the variable globals, as a convenience to keep the example code easy to follow)
-    static bool show_demo_window = true;
-    static bool show_another_window = false;
     static ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
     // Poll Unicode characters via JNI
@@ -217,59 +209,7 @@ void MainLoopStep()
     ImGui_ImplAndroid_NewFrame();
     ImGui::NewFrame();
 
-    int chunks = 0;
-    float samplesAudio[1024];
-    {
-        AudioQueue* pFreeQueue = nullptr;
-        AudioQueue* pRecQueue = nullptr;
-
-        float sampleRate;
-        GetBufferQueues(&sampleRate, &pFreeQueue, &pRecQueue);
-
-        sample_buf *buf = nullptr;
-        while (pRecQueue->front(&buf))
-        {            
-            pRecQueue->pop();
-            #define AU_LEN(l) (l/sizeof(int16_t))
-
-            int bufSize = AU_LEN(buf->cap_);
-            int16_t *buff = (int16_t *)(buf->buf_);
-            for (int n = 0; n < 1024; n++)
-            {
-                samplesAudio[n] = (float)buff[n];
-            }
-
-            pFreeQueue->push(buf);
-            chunks++;
-        }
-    }
-
-    // Show a simple window 
-    {
-        static float f = 0.0f;
-
-        ImGui::Begin("Hello, world!"); // Create a window called "Hello, world!" and append into it.
-
-        ImGui::Text("This is some useful text.");               // Display some text (you can use a format strings too)
-        ImGui::Checkbox("Demo Window", &show_demo_window);      // Edit bools storing our window open/close state
-        ImGui::Checkbox("Another Window", &show_another_window);
-
-        ImGui::SliderFloat("float", &f, 0.0f, 1.0f);            // Edit 1 float using a slider from 0.0f to 1.0f
-        ImGui::ColorEdit3("clear color", (float*)&clear_color); // Edit 3 floats representing a color
-
-        ImGui::Text("counter = %d", chunks);
-        ImGui::PlotLines("Samples Audio", samplesAudio, 200);
-
-        float samples[100];
-        for (int n = 0; n < 100; n++)
-            samples[n] = sinf(n * 0.2f + ImGui::GetTime() * 1.5f);
-        ImGui::PlotLines("Samples", samples, 100);
-
-
-        ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
-        Draw_waterfall();
-        ImGui::End();
-    }
+    Spectrogrammer_MainLoopStep();
 
     // Rendering
     ImGui::Render();
@@ -285,9 +225,7 @@ void Shutdown()
     if (!g_Initialized)
         return;
 
-    Audio_deleteAudioRecorder();
-    Audio_deleteSLEngine();
-    Init_waterfall();
+    Spectrogrammer_Shutdown();
 
     // Cleanup
     ImGui_ImplOpenGL3_Shutdown();
