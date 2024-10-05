@@ -8,19 +8,19 @@
 #include "audio/audio_main.h"
 #include "BufferAverage.h"
 
-int length = 4*1024;
+int fft_size = 4*1024;
 int sampleRate = 48000;
 int screenWidth = 1024;
+int droppedBuffers=0;
+int iterationsPerChunk = 0;
+int processedChunks = 0;
+float fraction_overlap = .5f; // 0 to 1
+float decay = .5f;
 
 Processor *pProcessor = NULL;
 ScaleBufferBase *pScale = nullptr;
 BufferAverage bufferAverage;
-
-#undef stderr
-FILE *stderr = &__sF[2];
-#undef stdout
-FILE *stdout = &__sF[1];
-//FILE *stdout, *stderr;
+ChunkerProcessor chunker;
 
 void Spectrogrammer_Init()
 {
@@ -31,10 +31,10 @@ void Spectrogrammer_Init()
 
 
     pProcessor = new myFFT();
-    pProcessor->init(length, sampleRate);
+    pProcessor->init(fft_size, sampleRate);
 
     pScale = new ScaleBufferLogLog();
-    int minFreq = ceil(((float)sampleRate/2.0)/(float)length);
+    int minFreq = ceil(((float)sampleRate/2.0)/(float)fft_size);
     int maxFreq = sampleRate/2;
     pScale->setOutputWidth(screenWidth, minFreq, maxFreq);
     pScale->PreBuild(pProcessor);
@@ -50,13 +50,6 @@ void Spectrogrammer_Shutdown()
     Audio_deleteSLEngine();
     Shutdown_waterfall();
 }
-
-ChunkerProcessor chunker;
-int droppedBuffers=0;
-int iterationsPerChunk = 0;
-int processedChunks = 0;
-float fractionOverlap = .5f; // 0 to 1
-float decay = .5f;
 
 void Spectrogrammer_MainLoopStep()
 {
@@ -115,7 +108,7 @@ void Spectrogrammer_MainLoopStep()
     c = 0;
 
     //if we have enough data queued process the fft
-    while (chunker.Process(pProcessor, decay, fractionOverlap))
+    while (chunker.Process(pProcessor, decay, fraction_overlap))
     {
         BufferIODouble *bufferIO = pProcessor->getBufferIO();
         if (bufferIO!=nullptr)
@@ -130,7 +123,8 @@ void Spectrogrammer_MainLoopStep()
                     float volume = 1;
                     pScale->Build(bufferIO, volume);
                     
-                    float *t = pScale->GetBuffer()->GetData();
+                    // +1 to skip DC
+                    float *t = pScale->GetBuffer()->GetData()+1;
                     Draw_update(t, pScale->GetBuffer()->GetSize());
                     
                     if (c==0)
@@ -149,9 +143,9 @@ void Spectrogrammer_MainLoopStep()
 
     static bool logX=true,logY=true;
     bool b = false;
-    b |= ImGui::Checkbox("x", &logX);
+    b |= ImGui::Checkbox("Log x", &logX);
     ImGui::SameLine();
-    b |= ImGui::Checkbox("y", &logY);
+    b |= ImGui::Checkbox("Log y", &logY);
     if (b)
     {
         delete pScale;
@@ -166,14 +160,17 @@ void Spectrogrammer_MainLoopStep()
             pScale = new ScaleBufferLinLog();
 
         int screenWidth = 1024;
-        int minFreq = ceil(((float)sampleRate/2.0)/(float)length);
+        int minFreq = ceil(((float)sampleRate/2.0)/(float)fft_size);
         int maxFreq = sampleRate/2;
         pScale->setOutputWidth(screenWidth, minFreq, maxFreq);
         pScale->PreBuild(pProcessor);        
     }
 
-    ImGui::SliderFloat("overlap", &fractionOverlap, 0.0f, 0.99f);
+    ImGui::SliderFloat("overlap", &fraction_overlap, 0.0f, 0.99f);
     ImGui::SliderFloat("decay", &decay, 0.0f, 0.99f);
+    static int averaging = 1;
+    if (ImGui::SliderInt("averaging", &averaging, 1,500))
+        bufferAverage.setAverageCount(averaging);
     ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
 
     //ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, 0);
@@ -190,7 +187,9 @@ void Spectrogrammer_MainLoopStep()
     );
     //ImGui::PopStyleVar();
 
-    Draw_waterfall();
+    float time_per_row = (((float)fft_size/sampleRate) * (float)averaging) * (1.0 - fraction_overlap);
+
+    Draw_waterfall(time_per_row);
 
     ImGui::End();
 

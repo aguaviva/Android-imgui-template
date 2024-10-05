@@ -270,5 +270,7 @@ static uint16_t _magma_data[256]  = {
 
 uint16_t GetMagma(int i)
 {
+    if (i>255)
+        i=255;
     return _magma_data[i];
 }

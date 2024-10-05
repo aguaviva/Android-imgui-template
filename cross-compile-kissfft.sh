@@ -25,7 +25,8 @@ git clone git@github.com:mborgerding/$module.git --depth=1
 fi
 
 cd $module
-make PREFIX=$workdir/app/src/main/jni/kissfft/arm64-v8a/  KISSFFT_DATATYPE=float KISSFFT_STATIC=1 KISSFFT_TOOLS=0 KISSFFT_OPENMP=0 install
+make clean
+make PREFIX=$workdir/app/src/main/jni/kissfft/arm64-v8a/  KISSFFT_DATATYPE=float KISSFFT_STATIC=1 KISSFFT_TOOLS=0 KISSFFT_OPENMP=0 CFLAGS=-DNDEBUG=1 install
 popd
 
 
