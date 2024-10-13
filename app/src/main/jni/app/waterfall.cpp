@@ -8,7 +8,47 @@
 #include <GLES3/gl3.h>
 #include <stdlib.h>
 #include <math.h>
+#include "waterfall.h"
 #include "colormaps.h"
+
+// some helper functions
+
+void calc_scale(float seconds_per_row, float desired_distance, float *notch_distance, float *scale)
+{
+    *notch_distance = desired_distance;
+    *scale = 1;
+
+    float min_err = 10000;
+    float scale_list[] = {1.0f/20.0f, 1.0f/10.0f, 1.0f/2.0f, 1.0f, 3.0f, 4.0f, 10.0f, 30.0f, 60.0f, 120.0f, 300.0f, 600.0f, 1200.0f, 3600.0f};
+    for (int i=0;i<14;i++)
+    {        
+        float nd = scale_list[i]/seconds_per_row;
+        float err = abs(nd - desired_distance);
+        if (err<min_err)
+            min_err = err;
+        if (err>min_err)
+            break;
+        *notch_distance = nd;
+        *scale = scale_list[i];
+    }
+}
+
+float get_time_magnitude(float total_time)
+{
+    // find time magnitude
+    int time_magnitude = -1;
+    if (total_time>60*60)
+        time_magnitude=3;
+    else if (total_time>60)
+        time_magnitude=2;
+    else if (total_time>20)
+        time_magnitude=1;
+    else 
+        time_magnitude=0;
+
+    return time_magnitude;
+}
+
 
 static int image_width = 512;
 static int image_height = 512;
@@ -40,7 +80,6 @@ void Init_waterfall(int16_t width, int16_t height)
     // Upload pixels into texture
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, image_width, image_height, 0, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, image_data);
     
-
     free(image_data);
 }
 
@@ -59,7 +98,6 @@ void update_texture_row(uint16_t *image_data)
     offset--;
     if (offset<0)
         offset = image_height-1;
-
 }
 
 void Draw_update(uint16_t *pData, uint32_t size)
@@ -90,53 +128,58 @@ void Draw_update(float *pData, uint32_t size)
     update_texture_row(image_data);
 }
 
-
-void Draw_waterfall(float seconds_per_row)
+int Draw_waterfall(float seconds_per_row)
 {
+    ImGuiContext& g = *GImGui;
     ImGuiWindow* window = ImGui::GetCurrentWindow();
     if (window->SkipItems)
-        return;
+        return -1;
 
-    ImVec2 iv = ImGui::GetCursorPos();
+    const ImGuiID id = window->GetID("sdad");
+
+    const ImVec2 frame_size(image_width, image_height);
+
+    const ImRect frame_bb(window->DC.CursorPos, ImVec2(window->DC.CursorPos.x + frame_size.x, window->DC.CursorPos.y + frame_size.y));
+    const ImRect total_bb(frame_bb.Min, frame_bb.Max);
+    if (!ImGui::ItemAdd(total_bb, id, &frame_bb, ImGuiItemFlags_NoNav))
+        return -1;
+    bool hovered;
+    ImGui::ButtonBehavior(frame_bb, id, &hovered, NULL);
+
+    int idx_hovered = -1;
 
     float foffset = offset/(float)(image_height-1);
 
     ImGui::Image((void*)(intptr_t)image_texture, ImVec2(image_width, image_height-offset), ImVec2(0,foffset), ImVec2(1,1));
-    ImGui::SetCursorPos(ImVec2(iv.x, iv.y+image_height-offset));
+    ImGui::SetCursorPos(ImVec2(frame_bb.Min.x, frame_bb.Max.y-offset));
     ImGui::Image((void*)(intptr_t)image_texture, ImVec2(image_width, offset), ImVec2(0,0), ImVec2(1,foffset ));
-    
-    // find closest scale
-    float d = 25;
-    float notch_distance = d;
-    float scale = 1;
-    float min_err = 10000;
-    float scale_list[] = {1.0f/20.0f, 1.0f/10.0f, 1.0f/2.0f, 1.0f, 3.0f, 4.0f, 10.0f, 30.0f, 60.0f, 120.0f, 300.0f, 600.0f, 1200.0f, 3600.0f};
-    for (int i=0;i<14;i++)
-    {        
-        float nd = scale_list[i]/seconds_per_row;
-        float err = abs(nd-d);
-        if (err<min_err)
-            min_err = err;
-        if (err>min_err)
-            break;
-        notch_distance = nd;
-        scale = scale_list[i];
+
+    ImU32 col = IM_COL32(200, 200, 200, 200);
+
+    // Tooltip on hover
+    if (hovered && frame_bb.Contains(g.IO.MousePos))
+    {
+        window->DrawList->AddLine(
+            ImVec2(g.IO.MousePos.x, frame_bb.Min.y),
+            ImVec2(g.IO.MousePos.x, frame_bb.Max.y),
+            col);
+
+        char str[255];
+        sprintf(str, "%f Hz", g.IO.MousePos.x - frame_bb.Min.x); 
+        window->DrawList->AddText(ImVec2(g.IO.MousePos.x, frame_bb.Min.y), col, str);
     }
+
+    // calculate scale
+    float scale;
+    float notch_distance;
+    float desired_distance = 25;
+    calc_scale(seconds_per_row, desired_distance, &notch_distance, &scale);
     
     // find time magnitude
     float total_time = seconds_per_row * image_height;
-    int time_magnitude = -1;
-    if (total_time>60*60)
-        time_magnitude=3;
-    else if (total_time>60)
-        time_magnitude=2;
-    else if (total_time>20)
-        time_magnitude=1;
-    else 
-        time_magnitude=0;
+    int time_magnitude = get_time_magnitude(total_time);
 
-    // draw scale
-    ImU32 col = IM_COL32(200, 200, 200, 200);
+    // draw time scale
     for(int i=0;;i++)
     {
         float y = floor((float)i * notch_distance);
@@ -146,28 +189,41 @@ void Draw_waterfall(float seconds_per_row)
         bool long_notch = (i % 5)==0;
 
         window->DrawList->AddLine(
-            ImVec2(iv.x, iv.y + y),
-            ImVec2(iv.x + (long_notch?50:25), iv.y + y),
+            ImVec2(frame_bb.Min.x, frame_bb.Min.y + y),
+            ImVec2(frame_bb.Min.x + (long_notch?50:25), frame_bb.Min.y + y),
             col);
         
         if (long_notch)
         {
+            char str[255];
             int t = floor(i*scale);
-            char s[255];
-            int l;
-
             switch(time_magnitude)
             {
-                case 0: l = sprintf(s, "%0.2fs", i*scale); break;
-                case 1: l = sprintf(s, "%02is", t % 60); break;
-                case 2: l = sprintf(s, "%im%02is", t/60, t % 60); break;
-                case 3: l = sprintf(s, "%ih%02im", t/(60*60), (t%(60*60)) / 60); break;
+                case 0: sprintf(str, "%0.2fs", i*scale); break;
+                case 1: sprintf(str, "%02is", t % 60); break;
+                case 2: sprintf(str, "%im%02is", t/60, t % 60); break;
+                case 3: sprintf(str, "%ih%02im", t/(60*60), (t%(60*60)) / 60); break;
             }
 
-            window->DrawList->AddText(ImVec2(iv.x + 50, iv.y + y), col, s, s+l);
+            window->DrawList->AddText(ImVec2(frame_bb.Min.x + 50, frame_bb.Min.y + y), col, str);
         }
 
     }
+    /*
+    for (int f=0;f<40000;f+=1000)
+    {
+        float sf = pScale->backward(f);
+        float t = unlerp(0,48000, sf)
+        float xx = lerp(t,frame_bb.Min.x, frame_bb.Max.x);
+        window->DrawList->AddLine(
+            ImVec2(x, frame_bb.Min.y),
+            ImVec2(x, frame_bb.Max.y),
+            col);
+
+    }
+    */
+
+    return idx_hovered;
 }
 
 void Shutdown_waterfall()

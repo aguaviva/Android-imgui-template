@@ -18,13 +18,15 @@ public:
     void init(float maxIdx_,float minFreq_, float maxFreq_)
     {
         // Logarithmic
-        if (bLogarithmic) {
+        if (bLogarithmic) 
+        {
             a = minFreq_;
             b = log10(maxFreq_ / a) / maxIdx_;
             inva = 1.0 / a;
             invb = 1.0 / b;
         }
-        else {
+        else 
+        {
             // Linear
             maxIdx = maxIdx_;
             minFreq = minFreq_;

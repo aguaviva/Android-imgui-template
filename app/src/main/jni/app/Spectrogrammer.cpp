@@ -1,4 +1,5 @@
 #include "imgui.h"
+#include "imgui_internal.h"
 #include "waterfall.h"
 #include "Processor.h"
 #include "ChunkerProcessor.h"
@@ -18,7 +19,7 @@ float fraction_overlap = .5f; // 0 to 1
 float decay = .5f;
 
 Processor *pProcessor = NULL;
-ScaleBufferBase *pScale = nullptr;
+ScaleBufferBase *pScaleBuffer = nullptr;
 BufferAverage bufferAverage;
 ChunkerProcessor chunker;
 
@@ -33,11 +34,11 @@ void Spectrogrammer_Init()
     pProcessor = new myFFT();
     pProcessor->init(fft_size, sampleRate);
 
-    pScale = new ScaleBufferLogLog();
+    pScaleBuffer = new ScaleBufferLogLog();
     int minFreq = ceil(((float)sampleRate/2.0)/(float)fft_size);
     int maxFreq = sampleRate/2;
-    pScale->setOutputWidth(screenWidth, minFreq, maxFreq);
-    pScale->PreBuild(pProcessor);
+    pScaleBuffer->setOutputWidth(screenWidth, minFreq, maxFreq);
+    pScaleBuffer->PreBuild(pProcessor);
 
     bufferAverage.setAverageCount(1);
 
@@ -71,7 +72,7 @@ void Spectrogrammer_MainLoopStep()
     ImGui::Begin("imgui window", NULL, window_flags); // create a window
 
     int c = 0;
-    float samplesAudio[1024], samplesFFT[1024];
+    static float samplesAudio[1024], samplesFFT[1024];
 
     // pass available buffers to processor
     if (pRecQueue!=NULL)
@@ -105,6 +106,31 @@ void Spectrogrammer_MainLoopStep()
 
     ImGui::PlotLines("Samples Audio", samplesAudio, 1024);
 
+    static bool logX=true,logY=true;
+    bool b = false;
+    b |= ImGui::Checkbox("Log x", &logX);
+    ImGui::SameLine();
+    b |= ImGui::Checkbox("Log y", &logY);
+    if (b)
+    {
+        delete pScaleBuffer;
+
+        if (logX && logY)
+            pScaleBuffer = new ScaleBufferLogLog();
+        else if (!logX && !logY)
+            pScaleBuffer = new ScaleBufferLinLin();
+        else if (logX)
+            pScaleBuffer = new ScaleBufferLogLin();
+        else if (logY)
+            pScaleBuffer = new ScaleBufferLinLog();
+
+        int screenWidth = 1024;
+        int minFreq = ceil(((float)sampleRate/2.0)/(float)fft_size);
+        int maxFreq = sampleRate/2;
+        pScaleBuffer->setOutputWidth(screenWidth, minFreq, maxFreq);
+        pScaleBuffer->PreBuild(pProcessor);        
+    }
+
     c = 0;
 
     //if we have enough data queued process the fft
@@ -118,14 +144,14 @@ void Spectrogrammer_MainLoopStep()
             {
                 processedChunks++;
 
-                if (pScale) {
+                if (pScaleBuffer) {
 
                     float volume = 1;
-                    pScale->Build(bufferIO, volume);
+                    pScaleBuffer->Build(bufferIO, volume);
                     
                     // +1 to skip DC
-                    float *t = pScale->GetBuffer()->GetData()+1;
-                    Draw_update(t, pScale->GetBuffer()->GetSize());
+                    float *t = pScaleBuffer->GetBuffer()->GetData()+1;
+                    Draw_update(t, pScaleBuffer->GetBuffer()->GetSize());
                     
                     if (c==0)
                     {
@@ -141,31 +167,6 @@ void Spectrogrammer_MainLoopStep()
         }
     }
 
-    static bool logX=true,logY=true;
-    bool b = false;
-    b |= ImGui::Checkbox("Log x", &logX);
-    ImGui::SameLine();
-    b |= ImGui::Checkbox("Log y", &logY);
-    if (b)
-    {
-        delete pScale;
-
-        if (logX && logY)
-            pScale = new ScaleBufferLogLog();
-        else if (!logX && !logY)
-            pScale = new ScaleBufferLinLin();
-        else if (logX)
-            pScale = new ScaleBufferLogLin();
-        else if (logY)
-            pScale = new ScaleBufferLinLog();
-
-        int screenWidth = 1024;
-        int minFreq = ceil(((float)sampleRate/2.0)/(float)fft_size);
-        int maxFreq = sampleRate/2;
-        pScale->setOutputWidth(screenWidth, minFreq, maxFreq);
-        pScale->PreBuild(pProcessor);        
-    }
-
     ImGui::SliderFloat("overlap", &fraction_overlap, 0.0f, 0.99f);
     ImGui::SliderFloat("decay", &decay, 0.0f, 0.99f);
     static int averaging = 1;
@@ -173,19 +174,80 @@ void Spectrogrammer_MainLoopStep()
         bufferAverage.setAverageCount(averaging);
     ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
 
-    //ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, 0);
-    ImGui::PlotLines(
-        "FFT", 
-        samplesFFT, 
-        1024, 
-        0, // values_offset
-        NULL, // overlay_text
-        0, // float scale_min = FLT_MAX,
-        FLT_MAX, // float scale_max, 
-        ImVec2(1024, 100), 
-        sizeof(float)// int stride = sizeof(float)
-    );
-    //ImGui::PopStyleVar();
+    /*
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
+
+        ImGui::PlotLines(
+            "FFT", 
+            samplesFFT, 
+            1024, 
+            0, // values_offset
+            NULL, // overlay_text
+            0, // float scale_min = FLT_MAX,
+            FLT_MAX, // float scale_max, 
+            ImVec2(1024, 100), 
+            sizeof(float)// int stride = sizeof(float)
+        );
+        ImGui::PopStyleVar();
+    */
+
+    {
+        char label[] = "afsdfs";
+        uint32_t values_count = 1024;
+        int frame_height = 100;
+        float *pData = &samplesFFT[0];
+
+        ImGuiContext& g = *GImGui;
+        ImGuiWindow* window = ImGui::GetCurrentWindow();
+        if (window->SkipItems == false)
+        {
+            const ImGuiStyle& style = g.Style;
+            const ImGuiID id = window->GetID(label);
+
+            const ImVec2 frame_size(1024, frame_height);
+
+            const ImRect frame_bb(window->DC.CursorPos, ImVec2(window->DC.CursorPos.x + frame_size.x, window->DC.CursorPos.y + frame_size.y));
+            ImGui::ItemSize(frame_bb, 0);
+            if (ImGui::ItemAdd(frame_bb, id, NULL, ImGuiItemFlags_NoNav))
+            {
+                bool hovered;
+                ImGui::ButtonBehavior(frame_bb, id, &hovered, NULL);
+
+                ImGui::RenderFrame(frame_bb.Min, frame_bb.Max, ImGui::GetColorU32(ImGuiCol_FrameBg), true, style.FrameRounding);        
+
+                float scale_min = FLT_MAX;
+                float scale_max = FLT_MAX;
+
+                float v_min = FLT_MAX;
+                float v_max = -FLT_MAX;
+                for (int i = 0; i < values_count; i++)
+                {
+                    const float v = pData[i];
+                    if (v != v) // Ignore NaN values
+                        continue;
+                    v_min = ImMin(v_min, v);
+                    v_max = ImMax(v_max, v);
+                }
+                if (scale_min == FLT_MAX)
+                    scale_min = v_min;
+                if (scale_max == FLT_MAX)
+                    scale_max = v_max;
+
+                ImU32 col = IM_COL32(200, 200, 200, 200);
+
+                const float inv_scale = (scale_min == scale_max) ? 0.0f : (1.0f / (scale_max - scale_min));
+                ImVec2 tp0 = ImVec2( 0.0f, 1.0f - ImSaturate((pData[0] - scale_min) * inv_scale) );
+                for (int i = 1; i < values_count; i++)
+                {
+                    const ImVec2 tp1 = ImVec2( (float)i/(float)values_count, 1.0f - ImSaturate((pData[i] - scale_min) * inv_scale) );
+                    ImVec2 pos0 = ImLerp(frame_bb.Min, frame_bb.Max, tp0);
+                    ImVec2 pos1 = ImLerp(frame_bb.Min, frame_bb.Max, tp1);
+                    window->DrawList->AddLine(pos0, pos1, col);
+                    tp0 = tp1;
+                }
+            }
+        }
+    }
 
     float time_per_row = (((float)fft_size/sampleRate) * (float)averaging) * (1.0 - fraction_overlap);
 
