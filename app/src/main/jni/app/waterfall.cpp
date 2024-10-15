@@ -1,3 +1,7 @@
+#ifndef IMGUI_DEFINE_MATH_OPERATORS
+#define IMGUI_DEFINE_MATH_OPERATORS
+#endif
+
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "backends/imgui_impl_android.h"
@@ -128,31 +132,25 @@ void Draw_update(float *pData, uint32_t size)
     update_texture_row(image_data);
 }
 
-int Draw_waterfall(float seconds_per_row)
+void Draw_waterfall(ImRect frame_bb)
 {
     ImGuiContext& g = *GImGui;
     ImGuiWindow* window = ImGui::GetCurrentWindow();
     if (window->SkipItems)
-        return -1;
-
-    const ImGuiID id = window->GetID("sdad");
-
-    const ImVec2 frame_size(image_width, image_height);
-
-    const ImRect frame_bb(window->DC.CursorPos, ImVec2(window->DC.CursorPos.x + frame_size.x, window->DC.CursorPos.y + frame_size.y));
-    const ImRect total_bb(frame_bb.Min, frame_bb.Max);
-    if (!ImGui::ItemAdd(total_bb, id, &frame_bb, ImGuiItemFlags_NoNav))
-        return -1;
-    bool hovered;
-    ImGui::ButtonBehavior(frame_bb, id, &hovered, NULL);
-
-    int idx_hovered = -1;
+        return;
 
     float foffset = offset/(float)(image_height-1);
 
-    ImGui::Image((void*)(intptr_t)image_texture, ImVec2(image_width, image_height-offset), ImVec2(0,foffset), ImVec2(1,1));
-    ImGui::SetCursorPos(ImVec2(frame_bb.Min.x, frame_bb.Max.y-offset));
-    ImGui::Image((void*)(intptr_t)image_texture, ImVec2(image_width, offset), ImVec2(0,0), ImVec2(1,foffset ));
+    window->DrawList->AddImage((void*)(intptr_t)image_texture, frame_bb.Min, ImVec2(frame_bb.Max.x, frame_bb.Max.y - offset), ImVec2(0,foffset), ImVec2(1,1), IM_COL32_WHITE);
+    window->DrawList->AddImage((void*)(intptr_t)image_texture, ImVec2(frame_bb.Min.x, frame_bb.Max.y - offset), frame_bb.Max, ImVec2(0,0), ImVec2(1,foffset), IM_COL32_WHITE);
+}
+
+void Draw_hover_data(ImRect frame_bb, bool hovered)
+{
+    ImGuiContext& g = *GImGui;
+    ImGuiWindow* window = ImGui::GetCurrentWindow();
+    if (window->SkipItems)
+        return;
 
     ImU32 col = IM_COL32(200, 200, 200, 200);
 
@@ -168,6 +166,16 @@ int Draw_waterfall(float seconds_per_row)
         sprintf(str, "%f Hz", g.IO.MousePos.x - frame_bb.Min.x); 
         window->DrawList->AddText(ImVec2(g.IO.MousePos.x, frame_bb.Min.y), col, str);
     }
+}
+
+void Draw_vertical_scale(ImRect frame_bb, float seconds_per_row)
+{
+    ImGuiContext& g = *GImGui;
+    ImGuiWindow* window = ImGui::GetCurrentWindow();
+    if (window->SkipItems)
+        return;
+
+    ImU32 col = IM_COL32(200, 200, 200, 200);
 
     // calculate scale
     float scale;
@@ -208,22 +216,7 @@ int Draw_waterfall(float seconds_per_row)
             window->DrawList->AddText(ImVec2(frame_bb.Min.x + 50, frame_bb.Min.y + y), col, str);
         }
 
-    }
-    /*
-    for (int f=0;f<40000;f+=1000)
-    {
-        float sf = pScale->backward(f);
-        float t = unlerp(0,48000, sf)
-        float xx = lerp(t,frame_bb.Min.x, frame_bb.Max.x);
-        window->DrawList->AddLine(
-            ImVec2(x, frame_bb.Min.y),
-            ImVec2(x, frame_bb.Max.y),
-            col);
-
-    }
-    */
-
-    return idx_hovered;
+    }    
 }
 
 void Shutdown_waterfall()

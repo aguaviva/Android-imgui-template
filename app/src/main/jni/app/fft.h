@@ -92,7 +92,6 @@ public:
 
     void computePower(float decay)
     {
-        //fftwf_execute(m_plan);
         kiss_fftr( m_cfg , m_in , m_out );
 
         float totalPower = 0;
@@ -111,18 +110,12 @@ public:
 
     float bin2Freq(int bin) const
     {
-        if (bin==0)
-            return 0;
-
-        return (m_sampleRate * (float)bin) / (float) getProcessedLength();
+        return ((m_sampleRate) * (float)bin) / (float) getProcessedLength();
     }
 
     float freq2Bin(float freq) const
     {
-        if (freq==0)
-            return 0;
-
-        return (freq * (float) getProcessedLength()) / m_sampleRate;
+        return (freq * (float) getProcessedLength()) / (m_sampleRate);
     }
 };
 

@@ -12,7 +12,7 @@ export ANDROIDTARGET=34
 export KEYSTORE_PASSWORD=12345678
 
 echo Cleaning previous builds...
-#rm -r app/build
+rm -r app/build
 
 echo Creating build directories...
 mkdir -p app/build/intermediates/ndk
@@ -78,7 +78,7 @@ if [ $ret_code != 0 ]; then
 fi
 
 echo Delete temporary folder
-#rm -r lib
+rm -r lib
 
 echo Deleting unnecessary files...
 rm app/build/outputs/apk/$APKNAME.apk
