@@ -51,7 +51,7 @@ public:
         for(int x=0; x < m_pBins->GetSize(); x++)
         {
             float freq = XtoFreq(x);
-            int bin = (int)floor(pProc->freq2Bin(freq));
+            int bin = (int)ceil(pProc->freq2Bin(freq));
             pBins[x] = bin;
         }
     }
@@ -68,8 +68,8 @@ public:
         // set X axis
         int x=0;
         int bin = pBins[x];
-        output[x++]= input[bin];
-        for(; x < m_pOutput->GetSize(); x++)
+        output[x]= input[bin];
+        for(x=1; x < m_pOutput->GetSize(); x++)
         {
             int binNext = pBins[x];
 
