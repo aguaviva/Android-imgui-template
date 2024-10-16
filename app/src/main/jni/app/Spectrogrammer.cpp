@@ -28,6 +28,7 @@ float fraction_overlap = .5f; // 0 to 1
 float decay = .5f;
 float volume = 1;
 bool logX=true, logY=true;
+bool play = true;
 
 Processor *pProcessor = NULL;
 ScaleBufferBase *pScaleBufferX = nullptr;
@@ -162,38 +163,10 @@ void Spectrogrammer_MainLoopStep()
 
     static float samplesAudio[1024], samplesFFT[1024];
 
-    // pass available buffers to processor
-    if (pRecQueue!=NULL)
-    {
-        sample_buf *buf = nullptr;
-        while (pRecQueue->front(&buf))
-        {
-            pRecQueue->pop();
-
-            // last block? copy samples for drawing it
-            if (pRecQueue->size()==0)
-            {
-                int bufSize = AU_LEN(buf->cap_);
-                int16_t *buff = (int16_t *)(buf->buf_);
-                for (int n = 0; n < bufSize; n++)
-                {
-                    samplesAudio[n] = (float)buff[n];
-                }
-            }
-
-            if (chunker.pushAudioChunk(buf) == false)
-            {
-                droppedBuffers++;
-            }
-        }    
-    }    
-    else
-    {
-        ImGui::Text("pRecQueue is NULL");
-    }   
-
     ImGui::PlotLines("Waveform", samplesAudio, 1024);
 
+    ImGui::Checkbox("Play", &play);
+    ImGui::SameLine();
     bool bScaleXChanged = ImGui::Checkbox("Log x", &logX);
     ImGui::SameLine();
     bool bScaleYChanged = ImGui::Checkbox("Log y", &logY);
@@ -211,6 +184,32 @@ void Spectrogrammer_MainLoopStep()
         pScaleBufferX->PreBuild(pProcessor);        
     }
 
+    // pass available buffers to processor
+    if (pRecQueue!=NULL )
+    {
+        sample_buf *buf = nullptr;
+        while (pRecQueue->front(&buf))
+        {
+            pRecQueue->pop();
+
+            // last block? copy samples for drawing it
+            if (pRecQueue->size()==0 && play)
+            {
+                int bufSize = AU_LEN(buf->cap_);
+                int16_t *buff = (int16_t *)(buf->buf_);
+                for (int n = 0; n < bufSize; n++)
+                {
+                    samplesAudio[n] = (float)buff[n];
+                }
+            }
+
+            if (chunker.pushAudioChunk(buf) == false)
+            {
+                droppedBuffers++;
+            }
+        }    
+    }    
+
     ImGui::SliderFloat("overlap", &fraction_overlap, 0.0f, 0.99f);
     ImGui::SliderFloat("decay", &decay, 0.0f, 0.99f);
     if (ImGui::SliderInt("averaging", &averaging, 1,500))
@@ -220,21 +219,24 @@ void Spectrogrammer_MainLoopStep()
     static BufferIODouble *pBufferIO = NULL;
     while (chunker.Process(pProcessor, decay, fraction_overlap))
     {
-        pBufferIO = pProcessor->getBufferIO();
-        pBufferIO = bufferAverage.Do(pBufferIO);
-        scaleBufferY.apply(pBufferIO, logY?1.0f:20.0f   , logY);
-        pBufferIO = &scaleBufferY;
-        
-        if (pBufferIO!=NULL)
+        if (play)
         {
-            pScaleBufferX->Build(pBufferIO);
+            pBufferIO = pProcessor->getBufferIO();
+            pBufferIO = bufferAverage.Do(pBufferIO);
+            if (pBufferIO!=NULL)
+            {
+                scaleBufferY.apply(pBufferIO, logY?1.0f:20.0f   , logY);
+                pBufferIO = &scaleBufferY;
             
-            // +1 to skip DC
-            Draw_update(
-                pScaleBufferX->GetBuffer()->GetData(), 
-                pScaleBufferX->GetBuffer()->GetSize()
-            );
-            processedChunks++;
+                pScaleBufferX->Build(pBufferIO);
+                
+                // +1 to skip DC
+                Draw_update(
+                    pScaleBufferX->GetBuffer()->GetData(), 
+                    pScaleBufferX->GetBuffer()->GetSize()
+                );
+                processedChunks++;
+            }
         }
     }
 
@@ -252,7 +254,7 @@ void Spectrogrammer_MainLoopStep()
 
             static float data[8192];            
             static int size = 0;
-            if (pBufferIO!=NULL)
+            if (pBufferIO!=NULL && play)
             {
                 size = pBufferIO->GetSize();
                 float *pData = pBufferIO->GetData();
