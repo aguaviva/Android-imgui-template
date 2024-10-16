@@ -1,7 +1,19 @@
-# Android-imgui-template
+# Spectrogrammer
 
-A sort ot template, just opens a imgui window and tries to record audio
+Android app that computes a spectrogram
 
+## Features
+- 4096 bins (freq resolution of )
+- Linear / Log scales for both axis
+- Hold function
+- Waterfall
+- Configurable 
+    - fft decay
+    - fft overlap
+
+
+## Screenshot
+![Screenshot][def]
 
 ## Quickstart
 
@@ -10,5 +22,13 @@ git clone git@github.com:aguaviva/Android-imgui-template.git --recurse-submodule
 ./cross-compile-kissfft.sh
 ./build.sh
 ```
-Notes:
+
+## Notes/stuff I need help with:
 - remember to grant microphone permissions or app will crash
+- If app loses focus will crash/lose data
+
+## credits
+- cnlohr for [rawdrawandroid](https://github.com/cnlohr/rawdrawandroid)
+- mborgerding for [kissfft](https://github.com/mborgerding/kissfft)
+
+[def]: Screenshot.png
