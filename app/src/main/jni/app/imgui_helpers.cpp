@@ -84,16 +84,17 @@ static float lerp( float min, float max, float t )
     return min*(1.0-t) + max*t;
 }
 
-void draw_lines(ImRect frame_bb, float *pData, int values_count, float scale_min_y, float scale_max_y)
+void draw_lines(ImRect frame_bb, float *pData, int values_count, ImU32 col, float scale_min_y, float scale_max_y)
 {
+    if (pData==NULL || values_count==0)
+        return;
+        
     ImGuiWindow* window = ImGui::GetCurrentWindow();
 
     get_max_min(&pData[1], 2, values_count, &scale_max_y, &scale_min_y);
 
     const float inv_scale_y = (scale_min_y == scale_max_y) ? 0.0f : (1.0f / (scale_max_y - scale_min_y));
     
-    ImU32 col = IM_COL32(200, 200, 200, 200);
-
     ImVec2 pos0 = ImVec2(    
         frame_bb.Min.x + pData[2*0+0],
         lerp(frame_bb.Max.y, frame_bb.Min.y, ImSaturate((pData[2*0+1] - scale_min_y) * inv_scale_y))

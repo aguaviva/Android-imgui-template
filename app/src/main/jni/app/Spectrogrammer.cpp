@@ -29,12 +29,17 @@ float decay = .5f;
 float volume = 1;
 bool logX=true, logY=true;
 bool play = true;
+bool hold_spectrum = false;
 
 Processor *pProcessor = NULL;
 ScaleBufferBase *pScaleBufferX = nullptr;
 ScaleBufferY  scaleBufferY;
 BufferAverage bufferAverage;
 ChunkerProcessor chunker;
+
+BufferIODouble audioSamples;
+BufferIODouble spectrumSamples;
+BufferIODouble spectrumSamplesHold;
 
 void Spectrogrammer_Init()
 {
@@ -47,7 +52,8 @@ void Spectrogrammer_Init()
     // FIXME: Put some effort into DPI awareness
     ImGui::GetStyle().ScaleAllSizes(3.0f * 2);
 
-    Audio_createSLEngine(sample_rate, 1024);
+    int audio_buffer_length = 1024;
+    Audio_createSLEngine(sample_rate, audio_buffer_length);
     Audio_createAudioRecorder();
 
     Audio_startPlay();
@@ -73,7 +79,7 @@ void Spectrogrammer_Shutdown()
 void draw_log_scale(ImRect frame_bb)
 {
     ImGuiWindow* window = ImGui::GetCurrentWindow();
-    for (int e=2;e<5;e++) // number of zeroes
+    for (int e=1;e<5;e++) // number of zeroes
     {
         for (int i=0;i<10;i++)
         {
@@ -161,11 +167,11 @@ void Spectrogrammer_MainLoopStep()
     ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize); // make the next window fullscreen
     ImGui::Begin("imgui window", NULL, window_flags); // create a window
 
-    static float samplesAudio[1024], samplesFFT[1024];
-
-    ImGui::PlotLines("Waveform", samplesAudio, 1024);
+    ImGui::PlotLines("Waveform", audioSamples.GetData(), audioSamples.GetSize());
 
     ImGui::Checkbox("Play", &play);
+    ImGui::SameLine();
+    bool hold_pressed = ImGui::Checkbox("Hold", &hold_spectrum);
     ImGui::SameLine();
     bool bScaleXChanged = ImGui::Checkbox("Log x", &logX);
     ImGui::SameLine();
@@ -196,10 +202,11 @@ void Spectrogrammer_MainLoopStep()
             if (pRecQueue->size()==0 && play)
             {
                 int bufSize = AU_LEN(buf->cap_);
+                audioSamples.Resize(bufSize);
                 int16_t *buff = (int16_t *)(buf->buf_);
                 for (int n = 0; n < bufSize; n++)
                 {
-                    samplesAudio[n] = (float)buff[n];
+                    audioSamples.GetData()[n] = (float)buff[n];
                 }
             }
 
@@ -225,7 +232,7 @@ void Spectrogrammer_MainLoopStep()
             pBufferIO = bufferAverage.Do(pBufferIO);
             if (pBufferIO!=NULL)
             {
-                scaleBufferY.apply(pBufferIO, logY?1.0f:20.0f   , logY);
+                scaleBufferY.apply(pBufferIO, logY?1.0f:20.0f, logY);
                 pBufferIO = &scaleBufferY;
             
                 pScaleBufferX->Build(pBufferIO);
@@ -252,22 +259,32 @@ void Spectrogrammer_MainLoopStep()
             const ImGuiStyle& style = GImGui->Style;
             ImGui::RenderFrame(frame_bb.Min, frame_bb.Max, ImGui::GetColorU32(ImGuiCol_FrameBg), true, style.FrameRounding);        
 
-            static float data[8192];            
-            static int size = 0;
             if (pBufferIO!=NULL && play)
             {
-                size = pBufferIO->GetSize();
-                float *pData = pBufferIO->GetData();
-                
-                for (int i=0;i<size;i++)
+                float *pDataIn = pBufferIO->GetData();
+                spectrumSamples.Resize(2 * pBufferIO->GetSize());
+                float *pDataOut = spectrumSamples.GetData();                
+                for (int i=0;i<pBufferIO->GetSize();i++)
                 {
                     float freq = pProcessor->bin2Freq(i);
-                    data[2*i+0] = pScaleBufferX->FreqToX(freq);
-                    data[2*i+1] = pData[i];
+                    pDataOut[2*i+0] = pScaleBufferX->FreqToX(freq);
+                    pDataOut[2*i+1] = pDataIn[i];
                 }
             }
 
-            draw_lines(frame_bb, data, size, 0, 1);
+            ImU32 col = IM_COL32(200, 200, 200, 200);
+            draw_lines(frame_bb, spectrumSamples.GetData(), spectrumSamples.GetSize()/2, col, 0, 1);
+
+            if (hold_spectrum)
+            {
+                if (hold_pressed)
+                {
+                    spectrumSamplesHold.copy(&spectrumSamples);
+                }
+
+                ImU32 col = IM_COL32(200, 0, 0, 200);
+                draw_lines(frame_bb, spectrumSamplesHold.GetData(), spectrumSamplesHold.GetSize()/2, col, 0, 1);
+            }
             
             if (logX)
                 draw_log_scale(frame_bb);   
