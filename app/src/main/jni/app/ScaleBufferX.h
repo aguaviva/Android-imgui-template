@@ -1,5 +1,5 @@
-#ifndef SCALEBUFFER_H
-#define SCALEBUFFER_H
+#ifndef SCALEBUFFERX_H
+#define SCALEBUFFERX_H
 
 #define _USE_MATH_DEFINES
 #include <cmath>
@@ -10,14 +10,14 @@
 #include "ScaleBufferBase.h"
 
 
-template <bool useLogX, bool useLogY>
-class ScaleBuffer : public ScaleBufferBase
+template <bool use_log>
+class ScaleBufferX : public ScaleBufferBase
 {
-    Scale<useLogX> scaleXtoFreq;
+    Scale<use_log> scaleXtoFreq;
     BufferIOInt *m_pBins;
 
 public:
-    ~ScaleBuffer()
+    ~ScaleBufferX()
     {
         delete(m_pBins);
     }
@@ -56,7 +56,7 @@ public:
         }
     }
 
-    void Build(BufferIODouble *inputIO, float volume)
+    void Build(BufferIODouble *inputIO)
     {
         //set bins to min value
         m_pOutput->clear();
@@ -89,40 +89,10 @@ public:
 
             bin = binNext;
         }
-
-        // set Y axis
-        if (useLogY)
-        {
-            // log Y axis
-            const float ref = 32768/volume;
-            for (int i = 0; i < m_pOutput->GetSize(); i++)
-            {
-                output[i] = convertToDecibels(output[i], ref);
-                output[i] = clamp(unlerp( -120, -20, output[i]), 0, 1);
-            }
-        }
-        else
-        {
-            float max =  32768/volume;
-            for (int i = 0; i < m_pOutput->GetSize(); i++)
-            {
-                output[i] = clamp(unlerp( 0, max , output[i]), 0, 1);
-            }
-        }
-    }
-
-    float convertToDecibels(float v, float ref)
-    {
-        if (v<=0.001)
-            return -120;
-
-        return 20 * log10(v / ref);
     }
 };
 
-typedef ScaleBuffer<true, true> ScaleBufferLogLog;
-typedef ScaleBuffer<false, true> ScaleBufferLinLog;
-typedef ScaleBuffer<true, false> ScaleBufferLogLin;
-typedef ScaleBuffer<false,false> ScaleBufferLinLin;
+typedef ScaleBufferX<true> ScaleBufferXLog;
+typedef ScaleBufferX<false> ScaleBufferXLin;
 
 #endif

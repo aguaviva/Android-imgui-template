@@ -3,9 +3,9 @@
 #include "waterfall.h"
 #include "Processor.h"
 #include "ChunkerProcessor.h"
-#include "ScaleBuffer.h"
+#include "ScaleBufferX.h"
+#include "ScaleBufferY.h"
 #include "BufferAverage.h"
-#include "ScaleBufferBase.h"
 #include "audio/audio_main.h"
 #include "BufferAverage.h"
 #include "imgui_helpers.h"
@@ -30,7 +30,8 @@ float volume = 1;
 bool logX=true, logY=true;
 
 Processor *pProcessor = NULL;
-ScaleBufferBase *pScaleBuffer = nullptr;
+ScaleBufferBase *pScaleBufferX = nullptr;
+ScaleBufferY  scaleBufferY;
 BufferAverage bufferAverage;
 ChunkerProcessor chunker;
 
@@ -76,7 +77,7 @@ void draw_log_scale(ImRect frame_bb)
         for (int i=0;i<10;i++)
         {
             float freq = (i + 1) * pow(10.0f, e);
-            float x = pScaleBuffer->FreqToX(freq);
+            float x = pScaleBufferX->FreqToX(freq);
 
             if (x<0)
                 continue;
@@ -117,7 +118,7 @@ void draw_lin_scale(ImRect frame_bb)
         for (int i=0;i<5000;i+=1000)
         {
             float freq = m + i;
-            float x = pScaleBuffer->FreqToX(freq);
+            float x = pScaleBufferX->FreqToX(freq);
 
             if (i==0)
             {
@@ -193,26 +194,21 @@ void Spectrogrammer_MainLoopStep()
 
     ImGui::PlotLines("Waveform", samplesAudio, 1024);
 
-    bool bScaleChanged = false;
-    bScaleChanged |= ImGui::Checkbox("Log x", &logX);
+    bool bScaleXChanged = ImGui::Checkbox("Log x", &logX);
     ImGui::SameLine();
-    bScaleChanged |= ImGui::Checkbox("Log y", &logY);
+    bool bScaleYChanged = ImGui::Checkbox("Log y", &logY);
 
-    if (bScaleChanged || pScaleBuffer==NULL)
+    if (bScaleXChanged || pScaleBufferX==NULL)
     {
-        delete pScaleBuffer;
+        delete pScaleBufferX;
 
-        if (logX && logY)
-            pScaleBuffer = new ScaleBufferLogLog();
-        else if (!logX && !logY)
-            pScaleBuffer = new ScaleBufferLinLin();
-        else if (logX)
-            pScaleBuffer = new ScaleBufferLogLin();
-        else if (logY)
-            pScaleBuffer = new ScaleBufferLinLog();
+        if (logX)
+            pScaleBufferX = new ScaleBufferXLog();
+        else
+            pScaleBufferX = new ScaleBufferXLin();
 
-        pScaleBuffer->setOutputWidth(screenWidth, min_freq, max_freq);
-        pScaleBuffer->PreBuild(pProcessor);        
+        pScaleBufferX->setOutputWidth(screenWidth, min_freq, max_freq);
+        pScaleBufferX->PreBuild(pProcessor);        
     }
 
     ImGui::SliderFloat("overlap", &fraction_overlap, 0.0f, 0.99f);
@@ -226,14 +222,17 @@ void Spectrogrammer_MainLoopStep()
     {
         pBufferIO = pProcessor->getBufferIO();
         pBufferIO = bufferAverage.Do(pBufferIO);
+        scaleBufferY.apply(pBufferIO, logY?1.0f:20.0f   , logY);
+        pBufferIO = &scaleBufferY;
+        
         if (pBufferIO!=NULL)
         {
-            pScaleBuffer->Build(pBufferIO, volume);
+            pScaleBufferX->Build(pBufferIO);
             
             // +1 to skip DC
             Draw_update(
-                pScaleBuffer->GetBuffer()->GetData(), 
-                pScaleBuffer->GetBuffer()->GetSize()
+                pScaleBufferX->GetBuffer()->GetData(), 
+                pScaleBufferX->GetBuffer()->GetSize()
             );
             processedChunks++;
         }
@@ -261,12 +260,13 @@ void Spectrogrammer_MainLoopStep()
                 for (int i=0;i<size;i++)
                 {
                     float freq = pProcessor->bin2Freq(i);
-                    data[2*i+0] = pScaleBuffer->FreqToX(freq);
+                    data[2*i+0] = pScaleBufferX->FreqToX(freq);
                     data[2*i+1] = pData[i];
                 }
             }
 
-            draw_lines(frame_bb, data, size);
+            draw_lines(frame_bb, data, size, 0, 1);
+            
             if (logX)
                 draw_log_scale(frame_bb);   
             else

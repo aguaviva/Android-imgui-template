@@ -23,7 +23,7 @@ public:
     virtual float XtoFreq(float x) const = 0;
     virtual float FreqToX(float freq) const = 0;
     virtual void PreBuild(Processor *pProc) = 0;
-    virtual void Build(BufferIODouble *bufferIO, float volume) = 0;
+    virtual void Build(BufferIODouble *bufferIO) = 0;
 
     BufferIODouble *GetBuffer() const
     {

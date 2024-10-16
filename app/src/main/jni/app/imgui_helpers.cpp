@@ -84,11 +84,10 @@ static float lerp( float min, float max, float t )
     return min*(1.0-t) + max*t;
 }
 
-void draw_lines(ImRect frame_bb, float *pData, int values_count)
+void draw_lines(ImRect frame_bb, float *pData, int values_count, float scale_min_y, float scale_max_y)
 {
     ImGuiWindow* window = ImGui::GetCurrentWindow();
 
-    float scale_max_y = FLT_MAX, scale_min_y = FLT_MAX;
     get_max_min(&pData[1], 2, values_count, &scale_max_y, &scale_min_y);
 
     const float inv_scale_y = (scale_min_y == scale_max_y) ? 0.0f : (1.0f / (scale_max_y - scale_min_y));
@@ -97,13 +96,13 @@ void draw_lines(ImRect frame_bb, float *pData, int values_count)
 
     ImVec2 pos0 = ImVec2(    
         frame_bb.Min.x + pData[2*0+0],
-        lerp(frame_bb.Min.y, frame_bb.Max.y, 1.0f - ImSaturate((pData[2*0+1] - scale_min_y) * inv_scale_y))
+        lerp(frame_bb.Max.y, frame_bb.Min.y, ImSaturate((pData[2*0+1] - scale_min_y) * inv_scale_y))
     );
     for (int i = 1; i < values_count; i++)
     {
         const ImVec2 pos1 = ImVec2(    
             frame_bb.Min.x + pData[2*i+0],
-            lerp(frame_bb.Min.y, frame_bb.Max.y, 1.0f - ImSaturate((pData[2*i+1] - scale_min_y) * inv_scale_y))
+            lerp(frame_bb.Max.y, frame_bb.Min.y, ImSaturate((pData[2*i+1] - scale_min_y) * inv_scale_y))
         );
         window->DrawList->AddLine(pos0, pos1, col);
         pos0 = pos1;

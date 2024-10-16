@@ -8,6 +8,10 @@ class BufferIO
     type *m_rout = nullptr;
     int   m_size = 0;
 public:
+    BufferIO()
+    {
+        
+    }
     BufferIO(int size)
     {
         Resize(size);
