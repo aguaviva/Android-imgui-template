@@ -13,7 +13,7 @@ Android app that computes a spectrogram
 
 
 ## Screenshot
-![Screenshot][def]
+<img src="Screenshot.png" alt="Screenshot" width="200"/>
 
 ## Quickstart
 
@@ -30,5 +30,3 @@ git clone git@github.com:aguaviva/Android-imgui-template.git --recurse-submodule
 ## credits
 - cnlohr for [rawdrawandroid](https://github.com/cnlohr/rawdrawandroid)
 - mborgerding for [kissfft](https://github.com/mborgerding/kissfft)
-
-[def]: Screenshot.png
